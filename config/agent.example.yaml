@@ -1,0 +1,85 @@
+# Copy to config/agent.yaml and adjust.
+
+transcripts_dir: data/transcripts
+memory_dir: data/memory
+history_limit: 40
+
+# Display name used in group @mentions — set this so group messages are stripped correctly.
+# e.g. if the bot is named "Baby Jasmine" in WeCom, set: wecom_mention: "Baby Jasmine"
+# wecom_mention: "Baby Jasmine"
+
+reply:
+  max_emojis: 4
+  repair:
+    enabled: false
+    emoji_only: false  # when true: repair triggers on any text, rewrites to emoji+kaomoji only
+  # Optional last resort: skip the LLM and send exactly this text for a WeCom user.
+  # channels:
+  #   wecom:
+  #     overrides:
+  #       "wx_userid":
+  #         force_assistant: "…"
+
+llm:
+  provider: ocean
+  model: global.anthropic.claude-sonnet-4-6
+  temperature: null
+  ocean:
+    # Origin only is OK — app appends /ocean/v1.0/proxy/ai. Or set full URL via OCEAN_GATEWAY_URL env var.
+    gateway_url: ""  # e.g. "https://your-ocean-gateway:7799" or set OCEAN_GATEWAY_URL
+    scene_id: "OCEAN_SCENE_ID_REDACTED"  # set via OCEAN_SCENE_ID env var
+  ollama:
+    base_url: "http://127.0.0.1:11434/v1" # default http://127.0.0.1:11434/v1; or OLLAMA_BASE_URL / OLLAMA_HOST
+  channels:
+    local:
+      provider: ollama
+      model: qwen3:8b
+    wecom:
+      # provider: ocean
+      # model: global.anthropic.claude-sonnet-4-6
+      provider: ollama
+      model: gemma4:latest
+      overrides: {}
+      # example:
+      # overrides:
+      #   "wx_userid_here":
+      #     provider: ollama
+      #     model: qwen2.5
+
+identity:
+  template: prompt/identity.md
+
+# Tools are only exposed to WeCom users listed in owner_userids.
+# Local channel always has tools. Leave the list empty to disable tools on WeCom for everyone.
+tools:
+  owner_userids:
+    - "wx_owner_userid"
+
+# Skills are auto-discovered from skills/*/SKILL.md — drop a folder to add a skill.
+skills_dir: skills
+
+sections:
+  personality:
+    template: prompt/personality.md
+    channels:
+      local:
+        enabled: true
+      wecom:
+        enabled: true
+        overrides: {}
+        # Per-user: `template` replaces the section; `template_merge: append` keeps the default
+        # `template` and appends the per-user file (stronger for small models than a one-liner
+        # replace). Create users/<name>.md for each person — the users/ folder is gitignored
+        # so these files are safe to put real names and personalities in.
+        # `display_name` is injected into the per-turn context block as the sender label,
+        # so the model always knows who it's talking to without relying on memory lookup.
+        # Example:
+        # overrides:
+        #   "wx_userid_1":
+        #     template: users/mom.md
+        #     template_merge: append
+        #     display_name: "your mother 🌿"
+        #   "wx_userid_2":
+        #     template: users/alain.md
+        #     template_merge: append
+        #     display_name: "your father 🧸"
