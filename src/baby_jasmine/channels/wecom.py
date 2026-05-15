@@ -152,6 +152,23 @@ async def run_wecom_loop(
             except Exception:
                 logger.exception("[WeCom] Failed to open stream for %s", session_key)
 
+            _acc: list[str] = []
+            _stream_tasks: list[asyncio.Task[None]] = []
+
+            async def _push_delta(text: str) -> None:
+                try:
+                    await client.reply_stream(frame, stream_id, text, finish=False)
+                except Exception:
+                    pass
+
+            def _on_delta(chunk: str) -> None:
+                _acc.append(chunk)
+                _stream_tasks.append(asyncio.ensure_future(_push_delta("".join(_acc))))
+
+            def _on_stream_reset() -> None:
+                _acc.clear()
+                _stream_tasks.append(asyncio.ensure_future(_push_delta(" ")))
+
             async with _session_locks[session_key]:
                 full = await run_turn(
                     cfg=cfg,
@@ -166,10 +183,12 @@ async def run_wecom_loop(
                     user_images=user_images,
                     cli_provider=cli_provider,
                     cli_model=cli_model,
-                    on_delta=None,
+                    on_delta=_on_delta,
+                    on_stream_reset=_on_stream_reset,
                 )
-            # Deliver the complete reply. If we opened a stream, close it with the
-            # full text; otherwise fall back to a fresh stream (stream expired).
+            if _stream_tasks:
+                await asyncio.gather(*_stream_tasks, return_exceptions=True)
+            # Deliver the complete reply, closing the stream with the final text.
             await client.reply_stream(frame, stream_id, full, finish=True)
             logger.info("[WeCom SEND] session=%s reply=%r", session_key, full)
 

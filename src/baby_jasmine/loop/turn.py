@@ -3,7 +3,6 @@ from __future__ import annotations
 import inspect
 import json
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
 
 from pi_agent_core import ImageContent, Model, SimpleStreamOptions, TextContent
@@ -40,6 +39,7 @@ async def run_turn(
     cli_provider: str | None = None,
     cli_model: str | None = None,
     on_delta: Callable[[str], None] | None = None,
+    on_stream_reset: Callable[[], None] | None = None,
 ) -> str:
     resolved = resolve_llm(
         cfg,
@@ -49,11 +49,6 @@ async def run_turn(
         cli_model=cli_model,
     )
     meta = {"llm.provider": resolved.provider, "llm.model": resolved.model}
-
-    if channel == "wecom" and wecom_userid:
-        ts = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-        chat = f"group: {group_id}" if group_id else "private"
-        user_text = f"[{ts} | from: {wecom_userid} | {chat}]\n{user_text}"
 
     history_store.append(
         session_key=session_key,
@@ -75,16 +70,16 @@ async def run_turn(
     else:
         stream_fn = create_stream_fn(resolved)
         model = Model(api=resolved.provider, provider=resolved.provider, id=resolved.model)
+        tool_owner = is_tool_owner(cfg, channel=channel, wecom_userid=wecom_userid)
         system = build_system_prompt(
             cfg,
             project_root=project_root,
             channel=channel,
             wecom_userid=wecom_userid,
             group_id=group_id,
+            has_tools=tool_owner,
         )
-        tools = (
-            list_tools() if is_tool_owner(cfg, channel=channel, wecom_userid=wecom_userid) else []
-        )
+        tools = list_tools() if tool_owner else []
 
         agent = sessions.get_or_create(
             session_key,
@@ -98,6 +93,8 @@ async def run_turn(
 
         def on_event(event) -> None:
             if event.type == "tool_execution_start":
+                if on_stream_reset:
+                    on_stream_reset()
                 tool_payload = {
                     "id": event.tool_call_id,
                     "name": event.tool_name,

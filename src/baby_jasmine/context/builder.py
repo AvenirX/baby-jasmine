@@ -47,6 +47,7 @@ def build_system_prompt(
     channel: Channel,
     wecom_userid: str | None,
     group_id: str | None = None,
+    has_tools: bool = True,
 ) -> str:
     parts: list[str] = []
     ident = cfg.identity
@@ -89,7 +90,9 @@ def build_system_prompt(
             if body:
                 parts.append(body)
         display_name = wecom_sender_label(cfg, wecom_userid)
-        context_block = _build_wecom_context_block(wecom_userid, group_id, display_name)
+        context_block = _build_wecom_context_block(
+            wecom_userid, group_id, display_name, has_tools=has_tools
+        )
         if context_block:
             parts.append(context_block)
 
@@ -100,6 +103,7 @@ def _build_wecom_context_block(
     wecom_userid: str | None,
     group_id: str | None,
     display_name: str | None = None,
+    has_tools: bool = True,
 ) -> str:
     if not wecom_userid:
         return ""
@@ -108,17 +112,19 @@ def _build_wecom_context_block(
     if group_id:
         lines.append(f"- Chat type: group (ID: `{group_id}`)")
         lines.append(f"- Sender: {sender}")
-        lines.append("")
-        lines.append(
-            f'Before responding, call `recall_person` with `wecom_userid="{wecom_userid}"` '
-            f'and `current_context="group"` to recall what you know about this person.'
-        )
+        if has_tools:
+            lines.append("")
+            lines.append(
+                f'Before responding, call `recall_person` with `wecom_userid="{wecom_userid}"` '
+                f'and `current_context="group"` to recall what you know about this person.'
+            )
     else:
         lines.append("- Chat type: private")
         lines.append(f"- Sender: {sender}")
-        lines.append("")
-        lines.append(
-            f'Optionally call `recall_person` with `wecom_userid="{wecom_userid}"` '
-            f'and `current_context="private"` if context about this person would help.'
-        )
+        if has_tools:
+            lines.append("")
+            lines.append(
+                f'Optionally call `recall_person` with `wecom_userid="{wecom_userid}"` '
+                f'and `current_context="private"` if context about this person would help.'
+            )
     return "\n".join(lines)
